@@ -8,6 +8,9 @@
 Greatest common (positive) divisor (or zero if all arguments are zero).
 The arguments may be integer and rational numbers.
 
+``a`` is a divisor of ``b`` if there exists an integer ``m`` such
+that ``ma=b``.
+
 !!! compat "Julia 1.4"
     Rational arguments require Julia 1.4 or later.
 
@@ -97,6 +100,9 @@ end
 Least common (positive) multiple (or zero if any argument is zero).
 The arguments may be integer and rational numbers.
 
+``a`` is a multiple of ``b`` if there exists an integer ``m`` such
+that ``a=mb``.
+
 !!! compat "Julia 1.4"
     Rational arguments require Julia 1.4 or later.
 
@@ -150,7 +156,16 @@ gcd(a::T, b::T) where T<:Real = throw(MethodError(gcd, (a,b)))
 lcm(a::T, b::T) where T<:Real = throw(MethodError(lcm, (a,b)))
 
 gcd(abc::AbstractArray{<:Real}) = reduce(gcd, abc; init=zero(eltype(abc)))
-lcm(abc::AbstractArray{<:Real}) = reduce(lcm, abc; init=one(eltype(abc)))
+function lcm(abc::AbstractArray{<:Real})
+    # Using reduce with init=one(eltype(abc)) is buggy for Rationals.
+    l = length(abc)
+    if l == 0
+        eltype(abc) <: Integer && return one(eltype(abc))
+        throw(ArgumentError("lcm has no identity for $(eltype(abc))"))
+    end
+    l == 1 && return abs(only(abc))
+    return reduce(lcm, abc)
+end
 
 function gcd(abc::AbstractArray{<:Integer})
     a = zero(eltype(abc))
@@ -792,7 +807,7 @@ function bin(x::Unsigned, pad::Int, neg::Bool)
         i -= 1
     end
     neg && (@inbounds a[1] = 0x2d) # UInt8('-')
-    String(a)
+    unsafe_takestring(a)
 end
 
 function oct(x::Unsigned, pad::Int, neg::Bool)
@@ -806,7 +821,7 @@ function oct(x::Unsigned, pad::Int, neg::Bool)
         i -= 1
     end
     neg && (@inbounds a[1] = 0x2d) # UInt8('-')
-    String(a)
+    unsafe_takestring(a)
 end
 
 # 2-digit decimal characters ("00":"99")
@@ -876,7 +891,7 @@ function dec(x::Unsigned, pad::Int, neg::Bool)
     a = StringMemory(n)
     append_c_digits_fast(n, x, a, 1)
     neg && (@inbounds a[1] = 0x2d) # UInt8('-')
-    String(a)
+    unsafe_takestring(a)
 end
 
 function hex(x::Unsigned, pad::Int, neg::Bool)
@@ -897,7 +912,7 @@ function hex(x::Unsigned, pad::Int, neg::Bool)
         @inbounds a[i] = d + ifelse(d > 0x9, 0x57, 0x30)
     end
     neg && (@inbounds a[1] = 0x2d) # UInt8('-')
-    String(a)
+    unsafe_takestring(a)
 end
 
 const base36digits = UInt8['0':'9';'a':'z']
@@ -922,7 +937,7 @@ function _base(base::Integer, x::Integer, pad::Int, neg::Bool)
         i -= 1
     end
     neg && (@inbounds a[1] = 0x2d) # UInt8('-')
-    String(a)
+    unsafe_takestring(a)
 end
 
 split_sign(n::Integer) = unsigned(abs(n)), n < 0
@@ -998,7 +1013,7 @@ function bitstring(x::T) where {T}
         x = lshr_int(x, 4)
         i -= 4
     end
-    return String(str)
+    return unsafe_takestring(str)
 end
 
 """
@@ -1205,6 +1220,8 @@ julia> binomial(-5, 3)
 # External links
 * [Binomial coefficient](https://en.wikipedia.org/wiki/Binomial_coefficient) on Wikipedia.
 """
+binomial(n::Integer, k::Integer) = binomial(promote(n, k)...)
+
 Base.@assume_effects :terminates_locally function binomial(n::T, k::T) where T<:Integer
     n0, k0 = n, k
     k < 0 && return zero(T)
@@ -1233,7 +1250,6 @@ Base.@assume_effects :terminates_locally function binomial(n::T, k::T) where T<:
     end
     copysign(x, sgn)
 end
-binomial(n::Integer, k::Integer) = binomial(promote(n, k)...)
 
 """
     binomial(x::Number, k::Integer)
