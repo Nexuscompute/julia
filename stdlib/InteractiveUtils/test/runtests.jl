@@ -658,6 +658,10 @@ file, ln = functionloc(versioninfo, Tuple{})
 @test isfile(pathof(InteractiveUtils))
 @test isdir(pkgdir(InteractiveUtils))
 
+# compiler stdlib path updating
+file, ln = functionloc(Core.Compiler.tmeet, Tuple{Int, Float64})
+@test isfile(file)
+
 @testset "buildbot path updating" begin
     file, ln = functionloc(versioninfo, Tuple{})
     @test isfile(file)
@@ -819,7 +823,30 @@ end
 end
 
 @test Base.infer_effects(sin, (Int,)) == InteractiveUtils.@infer_effects sin(42)
+@test Base.infer_return_type(sin, (Int,)) == InteractiveUtils.@infer_return_type sin(42)
+@test Base.infer_exception_type(sin, (Int,)) == InteractiveUtils.@infer_exception_type sin(42)
+@test first(InteractiveUtils.@code_ircode sin(42)) isa Core.Compiler.IRCode
+@test first(InteractiveUtils.@code_ircode optimize_until="Inlining" sin(42)) isa Core.Compiler.IRCode
 
 @testset "Docstrings" begin
     @test isempty(Docs.undocumented_names(InteractiveUtils))
+end
+
+# issue https://github.com/JuliaIO/ImageMagick.jl/issues/235
+module OuterModule
+    module InternalModule
+        struct MyType
+            x::Int
+        end
+
+        Base.@deprecate_binding MyOldType MyType
+
+        export MyType
+    end
+    using .InternalModule
+    export MyType, MyOldType
+end # module
+@testset "Subtypes and deprecations" begin
+    using .OuterModule
+    @test_nowarn subtypes(Integer);
 end
